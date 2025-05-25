@@ -1,12 +1,14 @@
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.impute import SimpleImputer
 from sklearn.metrics import classification_report
 import joblib
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.utils import all_estimators
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.metrics import f1_score
+
 
 # functions 
 
@@ -107,10 +109,7 @@ def plot_metricas_gerais(df):
 
 
 def get_best_model(X_train, X_val, y_train, y_val, target_names):
-    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.svm import SVC
-    from sklearn.metrics import f1_score
+
 
     # Verificar consistência nos dados de entrada
     if X_train.shape[0] != y_train.shape[0] or X_val.shape[0] != y_val.shape[0]:
@@ -146,17 +145,16 @@ def get_best_model(X_train, X_val, y_train, y_val, target_names):
     if best_model is None:
         raise ValueError("Nenhum modelo pôde ser treinado. Verifique os dados ou os classificadores!")
 
-    # Retreinar com dados combinados (opcional)
-    X_combined = np.vstack([X_train, X_val])
-    y_combined = np.concatenate([y_train, y_val])
-    best_model.fit(X_combined, y_combined)
+    # # Retreinar com dados combinados (opcional)
+    # X_combined = np.vstack([X_train, X_val])
+    # y_combined = np.concatenate([y_train, y_val])
+    # best_model.fit(X_combined, y_combined)
 
     return best_model, pd.DataFrame(results)
 
 # Configurações
 CLASSES = ['sitting', 'standing', 'walking']
 random_state = 42
-
 
 # Coletar dados para comparação
 all_metrics = []
@@ -226,16 +224,6 @@ all_metrics += process_report(mediapipe_val_report, 'MediaPipe', 'Validação')
 all_metrics += process_report(mediapipe_test_report, 'MediaPipe', 'Teste')
 # Criar DataFrame
 df_comparacao = pd.DataFrame(all_metrics)
-
-# # Executar todos os gráficos
-# print("\n1. Métricas por Classe")
-# plot_metricas_por_classe(df_comparacao)
-
-# print("\n2. Consistência entre Validação e Teste")
-# plot_consistencia(df_comparacao)
-
-# print("\n3. Métricas Gerais Agrupadas")
-# plot_metricas_gerais(df_comparacao)
 
 # Exibir métricas dos modelos testados
 print("Top 5 Modelos YOLO:")
