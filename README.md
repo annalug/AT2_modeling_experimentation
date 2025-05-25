@@ -69,7 +69,7 @@ EXECUÇÃO DO PIPELINE
 
 3. Visualizar resultados:
    - Gráficos: results/gráficos/
-   - Relatório PDF: results/relatorio_comparativo.pdf
+   - Relatório PDF: report/Report_at2.pdf
 
 --------------------------------
 
