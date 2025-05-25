@@ -94,41 +94,64 @@ def normalize_keypoints_mediapipe(keypoints, image_width, image_height, mode=1):
         raise ValueError("Modo de normalização não suportado.")
 
 
-def extract_features_for_split_mediapipe(image_paths, labels, split_name):
-    """Extração com coleta de todas as amostras (incluindo NaNs)"""
-    all_features = []
-    valid_indices = []
+def extract_features_for_split_mediapipe(image_paths, original_labels, split_name): # Renomeado labels para original_labels
+    """Extração com coleta de todas as amostras (incluindo NaNs) e labels correspondentes"""
+    all_features_list = []
+    all_corresponding_labels_list = [] # Nova lista para manter a sincronia
 
     print(f"\nExtracting features for {split_name} split using MediaPipe...")
     for i, img_path_str in enumerate(tqdm(image_paths, desc=f"Processing {split_name}")):
         img_path = Path(img_path_str)
+        current_label = original_labels[i] # Pega o label correspondente à imagem atual
+
+        feature_vector = np.full(NUM_MEDIAPIPE_KEYPOINTS * 2, np.nan) # Padrão NaN
+        # success_normalization = False # Não estritamente necessário aqui se sempre adicionamos
+
         if not img_path.exists():
+            print(f"  Aviso: Imagem não encontrada {img_path_str}, pulando e adicionando NaNs.")
+            all_features_list.append(feature_vector)
+            all_corresponding_labels_list.append(current_label)
             continue
 
         img = cv2.imread(str(img_path))
         if img is None:
+            print(f"  Aviso: Não foi possível ler a imagem {img_path_str}, pulando e adicionando NaNs.")
+            all_features_list.append(feature_vector)
+            all_corresponding_labels_list.append(current_label)
             continue
 
         img_height, img_width, _ = img.shape
-        results = pose.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-
-        if not results.pose_landmarks:
-            # Armazena vetor de NaNs para imputação posterior
-            all_features.append(np.full(NUM_MEDIAPIPE_KEYPOINTS * 2, np.nan))
+        try:
+            results = pose.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        except Exception as e:
+            print(f"  Erro ao processar imagem {img_path_str} com MediaPipe: {e}")
+            all_features_list.append(feature_vector)
+            all_corresponding_labels_list.append(current_label)
             continue
 
-        normalized_kps, success = normalize_keypoints_mediapipe(
-            results.pose_landmarks, img_width, img_height, NORMALIZATION_MODE
-        )
 
-        if not success:
-            all_features.append(np.full(NUM_MEDIAPIPE_KEYPOINTS * 2, np.nan))
-        else:
-            all_features.append(normalized_kps.flatten())
+        if results.pose_landmarks:
+            normalized_kps, success_normalization = normalize_keypoints_mediapipe(
+                results.pose_landmarks, img_width, img_height, NORMALIZATION_MODE
+            )
+            if success_normalization:
+                feature_vector = normalized_kps.flatten()
+            # Se success_normalization for False, feature_vector permanece como NaNs
+        # Se não houver pose_landmarks, feature_vector permanece como NaNs
 
-        valid_indices.append(i)
+        all_features_list.append(feature_vector)
+        all_corresponding_labels_list.append(current_label) # Adiciona o label correspondente
 
-    return np.array(all_features), labels[valid_indices]
+    # Garante que ambos os arrays retornados tenham o mesmo número de amostras
+    final_features = np.array(all_features_list)
+    final_labels = np.array(all_corresponding_labels_list)
+
+    if final_features.shape[0] != final_labels.shape[0]:
+        # Esta verificação é uma salvaguarda, não deveria acontecer com a lógica acima
+        raise RuntimeError(f"Erro crítico de sincronização em extract_features_for_split_mediapipe para {split_name}: "
+                           f"Features {final_features.shape[0]}, Labels {final_labels.shape[0]}")
+
+    return final_features, final_labels
 
 
 def train_and_apply_imputer(features_dict):
@@ -148,40 +171,60 @@ def train_and_apply_imputer(features_dict):
     return features_dict
 
 
-def main():
+def main():  # em extract_mediapipe_features.py
     features_dict = {}
-    labels_dict = {}
+    labels_dict = {}  # Este dicionário agora armazenará os labels sincronizados
 
     for split in SPLITS:
-        image_paths, labels = load_image_paths_and_labels(DATASET_BASE_PATH, split, CLASSES)
+        image_paths, original_labels_for_split = load_image_paths_and_labels(DATASET_BASE_PATH, split, CLASSES)
         if not image_paths:
             print(f"Skipping {split} (no images found)")
             features_dict[split] = np.array([])
-            labels_dict[split] = np.array([])
+            labels_dict[split] = np.array([])  # Salva array vazio para labels também
             continue
 
-        features, valid_labels = extract_features_for_split_mediapipe(image_paths, labels, split)
+        # Passa original_labels_for_split para a função de extração
+        features, synced_labels = extract_features_for_split_mediapipe(image_paths, original_labels_for_split, split)
         features_dict[split] = features
-        labels_dict[split] = valid_labels
+        labels_dict[split] = synced_labels  # Usa os labels sincronizados
 
     # Treinar e aplicar imputer
-    features_dict = train_and_apply_imputer(features_dict)
+    # Certifique-se de que não há splits vazios antes de passar para o imputer
+    train_features = features_dict['train']
+    if train_features.ndim == 1 and train_features.size == 0:  # Verifica se é um array vazio
+        print("Não há features de treino para treinar o imputer. Pulando a imputação e salvamento.")
+    elif train_features.shape[0] == 0:  # Verifica se tem 0 amostras, mas múltiplas features
+        print("Features de treino têm 0 amostras. Pulando a imputação e salvamento.")
+    else:
+        features_dict_imputed = train_and_apply_imputer(
+            features_dict.copy())  # Usar .copy() se train_and_apply_imputer modifica in-place
 
-    # Salvar features processadas
-    for split in SPLITS:
-        if features_dict[split].size == 0:
-            continue
+        # Salvar features processadas
+        for split in SPLITS:
+            # Usa features_dict_imputed e labels_dict (que já está sincronizado)
+            if features_dict_imputed[split].size == 0 or labels_dict[split].size == 0:
+                print(f"Skipping saving for {split} due to empty features or labels after processing.")
+                continue
 
-        np.save(
-            OUTPUT_FEATURES_PATH / f"mediapipe_features_{split}_norm{NORMALIZATION_MODE}.npy",
-            features_dict[split]
-        )
-        np.save(
-            OUTPUT_FEATURES_PATH / f"mediapipe_labels_{split}_norm{NORMALIZATION_MODE}.npy",
-            labels_dict[split]
-        )
-        print(f"Saved {split} split with {features_dict[split].shape[0]} samples")
+            # Verificação final de consistência antes de salvar
+            if features_dict_imputed[split].shape[0] != labels_dict[split].shape[0]:
+                print(f"ALERTA: Inconsistência de tamanho antes de salvar {split}! "
+                      f"Features: {features_dict_imputed[split].shape[0]}, Labels: {labels_dict[split].shape[0]}. "
+                      "Isso NÃO deveria acontecer.")
+                # Decida como lidar: pular o salvamento, lançar erro, etc.
+                # Por agora, vamos pular para evitar corromper os dados de entrada do models.py
+                continue
 
+            np.save(
+                OUTPUT_FEATURES_PATH / f"mediapipe_features_{split}_norm{NORMALIZATION_MODE}.npy",
+                features_dict_imputed[split]
+            )
+            np.save(
+                OUTPUT_FEATURES_PATH / f"mediapipe_labels_{split}_norm{NORMALIZATION_MODE}.npy",
+                labels_dict[split]  # Salva os labels sincronizados
+            )
+            print(
+                f"Saved {split} split with {features_dict_imputed[split].shape[0]} features and {labels_dict[split].shape[0]} labels")
 
 if __name__ == "__main__":
     main()

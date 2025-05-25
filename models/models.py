@@ -6,7 +6,6 @@ import joblib
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from lazypredict.Supervised import LazyClassifier
 from sklearn.utils import all_estimators
 
 # functions 
@@ -113,6 +112,10 @@ def get_best_model(X_train, X_val, y_train, y_val, target_names):
     from sklearn.svm import SVC
     from sklearn.metrics import f1_score
 
+    # Verificar consistência nos dados de entrada
+    if X_train.shape[0] != y_train.shape[0] or X_val.shape[0] != y_val.shape[0]:
+        raise ValueError("Inconsistent number of samples between X and y!")
+
     classifiers = {
         'RandomForest': RandomForestClassifier(),
         'LogisticRegression': LogisticRegression(max_iter=1000),
@@ -139,9 +142,14 @@ def get_best_model(X_train, X_val, y_train, y_val, target_names):
             print(f"Erro em {name}: {str(e)}")
             continue
 
-    # Retreinar o melhor modelo com todos os dados
-    if best_model is not None:
-        best_model.fit(np.vstack([X_train, X_val]), np.concatenate([y_train, y_val]))
+    # Garantir que pelo menos um modelo foi treinado
+    if best_model is None:
+        raise ValueError("Nenhum modelo pôde ser treinado. Verifique os dados ou os classificadores!")
+
+    # Retreinar com dados combinados (opcional)
+    X_combined = np.vstack([X_train, X_val])
+    y_combined = np.concatenate([y_train, y_val])
+    best_model.fit(X_combined, y_combined)
 
     return best_model, pd.DataFrame(results)
 
