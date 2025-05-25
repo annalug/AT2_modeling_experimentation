@@ -61,7 +61,7 @@ def plot_metricas_por_classe(df):
                         textcoords='offset points')
 
     plt.tight_layout()
-    plt.savefig('../results/metricas_por_classe.jpg', dpi=300, bbox_inches='tight')  # Nova linha
+    plt.savefig('../results/graphs/metricas_por_classe.jpg', dpi=300, bbox_inches='tight')  # Nova linha
     plt.close()  # Fechar a figura após salvar
 
 # 2. Consistência entre Validação e Teste (Atualizada)
@@ -76,7 +76,7 @@ def plot_consistencia(df):
         ax.set_ylim(0, 1.1)
 
     plt.tight_layout()
-    plt.savefig('../results/consistencia_metricas.jpg', dpi=300, bbox_inches='tight')  # Nova linha
+    plt.savefig('../results/graphs/consistencia_metricas.jpg', dpi=300, bbox_inches='tight')  # Nova linha
     plt.close()
 
 
@@ -103,7 +103,7 @@ def plot_metricas_gerais(df):
                         textcoords='offset points')
 
     plt.tight_layout()
-    plt.savefig('../results/metricas_gerais.jpg', dpi=300, bbox_inches='tight')  # Nova linha
+    plt.savefig('../results/graphs/metricas_gerais.jpg', dpi=300, bbox_inches='tight')  # Nova linha
     plt.close()
 
 
