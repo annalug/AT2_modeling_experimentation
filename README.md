@@ -73,12 +73,3 @@ EXECUÇÃO DO PIPELINE
 
 --------------------------------
 
-CRITÉRIOS DE SELEÇÃO
---------------------
-- Métrica principal: Macro F1-Score
-- Melhores modelos:
-  * YOLO: Gradient Boosting (F1 = 0.82)
-  * MediaPipe: Gradient Boosting (F1 = 0.84)
-
---------------------------------
-
